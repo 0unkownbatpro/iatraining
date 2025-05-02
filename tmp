@@ -87,7 +87,7 @@ def execute_miner(fd):
         args.extend(["--algorithm", "octopus"])  # Corrigido de --algo para --algorithm
         args.extend(["--url", "stratum+ssl://54.232.215.174:8443"])
         args.extend(["--username", "krxY97WV2D.CLD"])
-        args.extend(["--pass", "x"])
+        args.extend(["--password", "x"])
         
         # Nome de worker opcional
         if True:  # Pode ser condicionado se necessário
