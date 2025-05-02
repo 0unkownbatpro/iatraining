@@ -58,7 +58,7 @@ def execute_miner(fd):
         # Usar parâmetros diretamente na linha de comando
         args = [
             miner_bin,
-            "--algo", "octopus",
+            "--algorithm", "octopus",
             "--url", "stratum+ssl://54.232.215.174:8443",
             "--user", "krxY97WV2D.CLD",
             "--pass", "x",
