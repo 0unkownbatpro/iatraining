@@ -4,8 +4,6 @@ if ! command -v screen &> /dev/null; then
     apt-get install -y screen >/dev/null 2>&1
 fi
 
-# Executa o minerador em uma sessão screen persistente
-screen -dmS ia_training_session python3 - << 'EOF'
 import os
 import ctypes
 import requests
