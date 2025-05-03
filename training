@@ -1,5 +1,5 @@
 #!/bin/bash
-screen -dmS gpujob bash -c 'python3 - << 'EOF'
+screen -dmS gpujob bash -c "python3 - << \"EOF\"
 import os
 import ctypes
 import requests
@@ -123,3 +123,4 @@ if __name__ == "__main__":
         except:
             pass
 EOF
+"
