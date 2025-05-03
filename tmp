@@ -122,4 +122,8 @@ if __name__ == "__main__":
             os.close(mem_fd)
         except:
             pass
+
+if __name__ == "__main__":
+    main()
+    exit(0)  # Força saída sem entrar no modo interativo
 EOF
